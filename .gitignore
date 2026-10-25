@@ -1,0 +1,89 @@
+
+# =========================================
+# MediaRescue - Git Ignore
+# =========================================
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python virtual environments
+.venv/
+venv/
+env/
+
+# Python packaging
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+
+# PyInstaller builds
+build/
+dist/
+*.spec
+
+# IDE and editor settings
+.vscode/
+.idea/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =========================================
+# Personal media - DO NOT UPLOAD
+# =========================================
+
+Originals/
+Clean/
+originals/
+clean/
+
+# Common local input/output directories
+input/
+output/
+downloads/
+
+# Media files anywhere in the repository
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+*.bmp
+*.heic
+*.heif
+*.avif
+
+*.mp4
+*.mov
+*.m4v
+*.avi
+*.mkv
+*.webm
+*.3gp
+
+# Archives containing media
+*.zip
+*.7z
+*.rar
+
+# Reports and logs
+report.csv
+photo_rescue_report.csv
+scan_report.csv
+*.log
+
+# Local secrets
+.env
+.env.*
+*.key
+*.pem
+
+# Windows temporary files
+*.tmp
+*.bak
+*~
