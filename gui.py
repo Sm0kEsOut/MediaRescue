@@ -51,7 +51,10 @@ class MediaRescueGUI:
         self.log = tk.Text(logframe, state='disabled', wrap='word', yscrollcommand=scroll.set, height=12)
         self.log.pack(side='left', fill='both', expand=True)
         scroll.configure(command=self.log.yview)
-        ttk.Button(frame, text='Open Output Folder', command=self.open_output).pack(fill='x', pady=(10, 0))
+        bottom = ttk.Frame(frame)
+        bottom.pack(fill='x', pady=(10, 0))
+        ttk.Button(bottom, text='Open Output Folder', command=self.open_output).pack(side='left', fill='x', expand=True, padx=(0, 5))
+        ttk.Button(bottom, text='Open HTML Report', command=self.open_report).pack(side='left', fill='x', expand=True, padx=(5, 0))
         self.root.after(100, self.poll_events)
         self.root.protocol('WM_DELETE_WINDOW', self.close)
 
@@ -176,8 +179,17 @@ class MediaRescueGUI:
             label = 'Cancelled' if summary['cancelled'] else 'Finished'
             self.status.set(f"{label}: {summary['processed']}/{summary['total']} files handled")
             self.append_log(f"{label}. Rebuilt: {counts['REBUILT']}, rejected: {counts['REJECTED']}, skipped: {counts['SKIPPED']}")
-            self.append_log('Report: ' + summary['report'])
-            messagebox.showinfo(label, 'Review report.csv. Rebuilt does not mean malware-free.')
+            self.append_log('CSV report: ' + summary['report'])
+            self.append_log('HTML report: ' + summary['html_report'])
+            messagebox.showinfo(label, 'Review report.html or report.csv. Rebuilt does not mean malware-free.')
+
+    def open_report(self):
+        raw = self.output.get().strip()
+        report = Path(raw) / 'report.html' if raw else None
+        if report and report.is_file():
+            os.startfile(str(report))
+        else:
+            messagebox.showwarning('Missing report', 'No HTML report found. Finish a reconstruction first.')
 
     def open_output(self):
         folder = Path(self.output.get().strip()) if self.output.get().strip() else None

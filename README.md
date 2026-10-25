@@ -1,154 +1,83 @@
-# 🛡️ MediaRescue
+# MediaRescue
 
-**A free, open-source photo and video reconstruction tool for Windows.**
+**A local Windows photo and video reconstruction utility.** MediaRescue decodes supported media and writes new JPEG/PNG images or H.264/AAC MP4 videos. It is intended to help reduce the original file structures and metadata transferred between devices.
 
-MediaRescue helps users rebuild photos and videos from untrusted sources into fresh media files, reducing the amount of original file structure and metadata carried into the new files.
+> **Security warning:** MediaRescue is **not** antivirus software or a Pegasus detector. A successful rebuild or Microsoft Defender scan does **not** prove a file is malware-free. Parsing untrusted media may expose vulnerabilities in Pillow, pillow-heif, FFmpeg, or FFprobe. For high-risk sources, work in an isolated, updated virtual machine.
 
-Designed for people transferring media from old phones, backups, external drives, or other potentially untrusted sources.
+## Features
 
-> ⚠️ **Important:** MediaRescue is not an antivirus engine, Pegasus detector, or malware removal tool. Successful reconstruction does not guarantee that a file is free from malicious content or unknown exploits.
+- Windows desktop GUI with input and output folder pickers
+- Photo rebuilds (JPEG, PNG, WebP, BMP, single-frame GIF, HEIC/HEIF, AVIF where supported)
+- Video re-encoding (MP4, MOV, M4V, AVI, MKV, WebM, 3GP where supported)
+- File-format and video-stream validation, plus size, duration and resolution limits
+- Progress bar, cancellation during video processing, and per-file statuses
+- **Optional** Microsoft Defender scan of original and output folders; scan errors or detections are not treated as clearance
+- **Two reports:** `report.csv` for machines and `report.html` for humans
+- Original files are left unchanged; unsupported or rejected files are not copied into the rebuilt media folders
 
-## ✨ Features
+## Download and use on Windows
 
-- 🖼️ Reconstructs supported photos as fresh JPEG or PNG files
-- 🎬 Re-encodes supported videos into H.264/AAC MP4 files
-- 🔒 Keeps original files untouched
-- 🧹 Excludes original metadata and unnecessary data streams from reconstructed outputs
-- 📁 Supports processing folders and subfolders
-- 🚫 Rejects files that cannot be processed
-- 📋 Generates a CSV report of the results
-- 🖥️ Runs on Windows 11
+If a tested build is available under [GitHub Releases](../../releases), download the complete Windows ZIP, extract the full folder, and launch `MediaRescue.exe`. Do not move the `.exe` out of the extracted application folder. The standalone build should bundle Python libraries and FFmpeg/FFprobe; verify this in that release's notes.
 
-## 📸 Supported formats
+1. Update Windows and scan downloaded files with your normal antivirus.
+2. Run MediaRescue. Choose separate **Source** and **Output** folders (neither should be inside the other).
+3. Optionally check **Scan originals and output with Microsoft Defender**.
+4. Select **Start Reconstruction**. You can cancel; the report will show how many files were processed.
+5. Open **HTML Report** to see rebuilt, rejected, skipped and unprocessed counts, with file-by-file details.
+6. Inspect the output and antivirus status before transferring only rebuilt files.
 
-| Type | Input formats | Output |
-|---|---|---|
-| Photos | JPG, JPEG, PNG, BMP, WebP, GIF, HEIC, HEIF, AVIF | JPG / PNG |
-| Videos | MP4, MOV, M4V, AVI, MKV, WebM, 3GP | MP4 |
+**Important:** The report describes **reconstruction**, not a malware clearance. Defender scan messages appear in the GUI log and Windows Security's history, not as a pass/fail verdict in the HTML report. Do not upload private reports to public GitHub issues: reports may include personal file paths and filenames.
 
-Some formats require additional decoder support. Animated and multi-frame images are rejected. Support varies depending on the installed versions of the decoding libraries.
+## Run from source
 
-## 📥 Installation
-
-### Requirements
-
-- Windows 11
-- Python 3
-- FFmpeg
-- Pillow
-- pillow-heif
-
-### Install dependencies
-
-Install Python and FFmpeg from their official distribution sources.
-
-Then run:
+Requirements: Windows 11, supported Python 3, FFmpeg and FFprobe on PATH or in `bin/`, and Python packages from `requirements.txt`.
 
 ```powershell
 python -m pip install -r requirements.txt
+python gui.py
 ```
 
-Verify FFmpeg:
-
-```powershell
-ffmpeg -version
-```
-
-## 🚀 Usage
-
-Download or clone this repository.
-
-Create separate input and output folders:
-
-```text
-C:\MediaRescue\
-  Originals\
-  Clean\
-```
-
-Place the media you want to rebuild in `Originals`.
-
-Run:
+CLI mode:
 
 ```powershell
 python media_rescue.py "C:\MediaRescue\Originals" "C:\MediaRescue\Clean"
 ```
 
-The program produces:
+Output structure:
 
 ```text
 Clean/
-  Photos/
-  Videos/
-  report.csv
+  Photos/      # Rebuilt JPEG/PNG files
+  Videos/      # Re-encoded MP4 files
+  report.csv   # Spreadsheet-readable per-file report
+  report.html  # Self-contained human-readable report
 ```
 
-Review the report before using the reconstructed media.
+## Build a Windows application
 
-Only consider transferring successfully rebuilt files. Keep rejected and unsupported originals separate.
-
-## 🧪 Automated Testing
-
-MediaRescue includes automated tests to verify media reconstruction, validation, cancellation, and error handling.
-
-To run the tests:
+Install PyInstaller separately:
 
 ```powershell
-python -m pip install -r requirements.txt
+python -m pip install pyinstaller
+python -m PyInstaller --onedir --windowed --clean --noconfirm --name MediaRescue --collect-all PIL --collect-all pillow_heif --add-binary "bin\ffmpeg.exe;bin" --add-binary "bin\ffprobe.exe;bin" gui.py
+```
+
+Then test `dist\MediaRescue\MediaRescue.exe` on a clean Windows machine. Distribute the **entire** `dist\MediaRescue` folder as a ZIP. Verify FFmpeg distribution licenses and notices before releasing a bundled build.
+
+## Automated tests
+
+```powershell
 python -m unittest discover -s tests -v
 ```
 
-The tests automatically generate harmless sample media and use temporary folders.
+Existing tests should be rerun after each update. Tests and successful conversion do not prove resistance to unknown malicious media.
 
-GitHub Actions is configured to run the test suite on pushes and pull requests.
+## Limitations and privacy
 
-**Important:** Passing automated tests does not guarantee that reconstructed files are malware-free or that MediaRescue can defend against unknown exploits.
+- Some malformed, animated, unsupported or oversized media will be rejected or skipped.
+- Metadata (including location and original camera details), quality, and orientation may change.
+- Video validation reads container metadata; it is not a malware scan.
+- Rebuilding does not guarantee safe media or prove a device is free of spyware.
+- MediaRescue processes media locally, and reports are saved locally. Optional Defender scanning invokes the Windows security service.
 
-See [TESTING.md](TESTING.md) for more information.
-
-## 🔐 Security limitations
-
-MediaRescue aims to reduce risks associated with transferring original media files, but it cannot establish that a file is safe.
-
-- It does not detect or remove Pegasus or other mobile spyware.
-- It is not a replacement for Microsoft Defender or another antivirus product.
-- Unknown vulnerabilities in image or video decoders may still be exploitable during conversion.
-- Malformed files may fail to process.
-- Reconstruction can change image or video quality, orientation, and metadata.
-- The current application does not provide a secure sandbox for processing untrusted files.
-
-For high-risk sources, run the program inside an isolated, updated virtual machine, and scan input and output files with trusted antivirus software.
-
-## 🔏 Privacy
-
-MediaRescue processes files locally using Python image libraries and FFmpeg.
-
-The project itself does not intentionally upload media to an online service.
-
-Do not submit personal or sensitive media in public bug reports.
-
-## 🛠️ Roadmap
-
-- [ ] Graphical Windows interface
-- [ ] Standalone Windows executable
-- [ ] Progress bar and cancel button
-- [ ] Improved media validation
-- [ ] Automated tests
-- [ ] Optional Microsoft Defender integration
-- [ ] Human-readable scan reports
-
-## 🤝 Contributing
-
-Contributions, bug reports, and suggestions are welcome.
-
-Please avoid including personal media in issues or pull requests.
-
-For potential security vulnerabilities, follow the instructions in `SECURITY.md` rather than publicly posting exploit details.
-
-## 📄 License
-
-See the `LICENSE` file for the terms under which this project is distributed.
-
----
-
-**Disclaimer:** MediaRescue is a media reconstruction utility, not a forensic security product. It cannot certify that devices or media are free of spyware.
+For vulnerability disclosures, see [SECURITY.md](SECURITY.md). The application's source license is described in [LICENSE](LICENSE); included third-party binaries retain their own licenses.

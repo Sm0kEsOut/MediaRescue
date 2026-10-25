@@ -12,6 +12,7 @@ import stat
 import time
 import json
 import math
+from reporting import write_html_report
 
 register_heif_opener()
 Image.MAX_IMAGE_PIXELS = 40_000_000
@@ -277,8 +278,9 @@ def process_media(source, target, progress_callback=None, cancel_event=None):
             writer = csv.writer(f)
             writer.writerow(['Original', 'Status', 'Details'])
             writer.writerows(results)
+        write_html_report(target / 'report.html', results, total=len(files), cancelled=was_cancelled)
     return {'total': len(files), 'processed': len(results), 'counts': totals,
-            'cancelled': was_cancelled, 'report': str(target / 'report.csv')}
+            'cancelled': was_cancelled, 'report': str(target / 'report.csv'), 'html_report': str(target / 'report.html')}
 
 
 def main():
