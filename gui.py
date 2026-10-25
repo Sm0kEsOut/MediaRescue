@@ -1,253 +1,167 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
-from media_rescue import process_media
-import subprocess
-import threading
-import queue
-import sys
+from threading import Thread, Event
+from queue import Queue, Empty
 import os
+
+from MediaRescue.media_rescue import process_media
 
 class MediaRescueGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("MediaRescue")
-        self.root.geometry("700x510")
-        self.root.minsize(600, 450)
-
+        self.root.title('MediaRescue')
+        self.root.geometry('730x560')
         self.source = tk.StringVar()
         self.output = tk.StringVar()
-        self.status = tk.StringVar(value="Ready")
-        self.messages = queue.Queue()
+        self.status = tk.StringVar(value='Ready')
+        self.progress_value = tk.DoubleVar(value=0)
+        self.events = Queue()
+        self.cancel_event = Event()
         self.running = False
+        self.completed = 0
+        self.total = 0
 
-        frame = ttk.Frame(root, padding=20)
-        frame.pack(fill="both", expand=True)
+        frame = ttk.Frame(root, padding=18)
+        frame.pack(fill='both', expand=True)
+        ttk.Label(frame, text='MediaRescue', font=('Segoe UI', 22, 'bold')).pack(anchor='w')
+        ttk.Label(frame, text='Photo & video reconstruction — not malware detection').pack(anchor='w', pady=(0, 14))
+        self.folder_row(frame, 'Source folder', self.source)
+        self.folder_row(frame, 'Output folder', self.output)
+        ttk.Label(frame, text='Only reconstructed files should be considered for transfer. '
+                  'Processing untrusted files can expose decoder vulnerabilities.', wraplength=670).pack(anchor='w', pady=(5, 12))
+        actions = ttk.Frame(frame)
+        actions.pack(fill='x')
+        self.start_button = ttk.Button(actions, text='Start Reconstruction', command=self.start)
+        self.start_button.pack(side='left', fill='x', expand=True, padx=(0, 5))
+        self.cancel_button = ttk.Button(actions, text='Cancel', command=self.cancel, state='disabled')
+        self.cancel_button.pack(side='left', fill='x', expand=True, padx=(5, 0))
+        self.progress = ttk.Progressbar(frame, variable=self.progress_value, maximum=100, mode='determinate')
+        self.progress.pack(fill='x', pady=(15, 4))
+        ttk.Label(frame, textvariable=self.status).pack(anchor='w', pady=(0, 10))
+        logframe = ttk.Frame(frame)
+        logframe.pack(fill='both', expand=True)
+        scroll = ttk.Scrollbar(logframe)
+        scroll.pack(side='right', fill='y')
+        self.log = tk.Text(logframe, state='disabled', wrap='word', yscrollcommand=scroll.set, height=12)
+        self.log.pack(side='left', fill='both', expand=True)
+        scroll.configure(command=self.log.yview)
+        ttk.Button(frame, text='Open Output Folder', command=self.open_output).pack(fill='x', pady=(10, 0))
+        self.root.after(100, self.poll_events)
+        self.root.protocol('WM_DELETE_WINDOW', self.close)
 
-        ttk.Label(
-            frame, text="MediaRescue",
-            font=("Segoe UI", 22, "bold")
-        ).pack(anchor="w")
-
-        ttk.Label(
-            frame,
-            text="Photo & Video Reconstruction Utility"
-        ).pack(anchor="w", pady=(0, 20))
-
-        self.folder_row(frame, "Source folder",
-                        self.source)
-
-        self.folder_row(frame, "Output folder",
-                        self.output)
-
-        warning = (
-            "Security notice: This tool reconstructs media "
-            "but does not detect Pegasus or guarantee "
-            "that files are malware-free."
-        )
-
-        ttk.Label(
-            frame, text=warning,
-            wraplength=600,
-            foreground="#a06000"
-        ).pack(anchor="w", pady=12)
-
-        self.start_button = ttk.Button(
-            frame,
-            text="Start Reconstruction",
-            command=self.start
-        )
-        self.start_button.pack(fill="x", pady=10)
-
-        self.progress = ttk.Progressbar(
-            frame, mode="indeterminate"
-        )
-        self.progress.pack(fill="x")
-
-        ttk.Label(
-            frame, textvariable=self.status
-        ).pack(anchor="w", pady=8)
-
-        log_frame = ttk.Frame(frame)
-        log_frame.pack(fill="both", expand=True)
-
-        scrollbar = ttk.Scrollbar(log_frame)
-        scrollbar.pack(side="right", fill="y")
-
-        self.log = tk.Text(
-            log_frame,
-            height=10,
-            state="disabled",
-            wrap="word",
-            yscrollcommand=scrollbar.set
-        )
-        self.log.pack(side="left", fill="both", expand=True)
-
-        scrollbar.config(command=self.log.yview)
-
-        ttk.Button(
-            frame,
-            text="Open Output Folder",
-            command=self.open_output
-        ).pack(fill="x", pady=(10, 0))
-
-        self.root.after(100, self.check_messages)
-        self.root.protocol("WM_DELETE_WINDOW", self.close)
-
-    def folder_row(self, parent, title, variable):
-        ttk.Label(parent, text=title).pack(anchor="w")
-
-        row = ttk.Frame(parent)
-        row.pack(fill="x", pady=(4, 12))
-
-        ttk.Entry(
-            row, textvariable=variable
-        ).pack(side="left", fill="x", expand=True)
-
-        ttk.Button(
-            row,
-            text="Browse",
-            command=lambda: self.browse(variable)
-        ).pack(side="left", padx=(8, 0))
+    def folder_row(self, frame, label, variable):
+        ttk.Label(frame, text=label).pack(anchor='w')
+        row = ttk.Frame(frame)
+        row.pack(fill='x', pady=(3, 12))
+        ttk.Entry(row, textvariable=variable).pack(side='left', fill='x', expand=True)
+        ttk.Button(row, text='Browse', command=lambda: self.browse(variable)).pack(side='left', padx=(8, 0))
 
     def browse(self, variable):
-        folder = filedialog.askdirectory()
-        if folder:
-            variable.set(folder)
+        selected = filedialog.askdirectory()
+        if selected:
+            variable.set(selected)
 
-    def write_log(self, message):
-        self.log.config(state="normal")
-        self.log.insert("end", message + "\n")
-        self.log.see("end")
-        self.log.config(state="disabled")
+    def append_log(self, msg):
+        self.log.configure(state='normal')
+        self.log.insert('end', msg + '\n')
+        self.log.see('end')
+        self.log.configure(state='disabled')
 
     def start(self):
         if self.running:
             return
-
-        src = Path(self.source.get()).expanduser()
-        dst = Path(self.output.get()).expanduser()
-
+        raw_source = self.source.get().strip()
+        raw_target = self.output.get().strip()
+        if not raw_source or not raw_target:
+            messagebox.showerror('Missing folders', 'Select both source and output folders.')
+            return
+        src, dst = Path(raw_source).resolve(), Path(raw_target).resolve()
         if not src.is_dir():
-            messagebox.showerror(
-                "Invalid source", "Select an existing source folder."
-            )
+            messagebox.showerror('Invalid source', 'Select an existing source folder.')
             return
-
-        src = src.resolve()
-        dst = dst.resolve()
-
         if src == dst or src in dst.parents or dst in src.parents:
-            messagebox.showerror(
-                "Invalid folders",
-                "Source and output must be separate, "
-                "non-nested folders."
-            )
+            messagebox.showerror('Invalid folders', 'Choose separate, non-nested folders.')
             return
-
-        if not messagebox.askyesno(
-            "Start reconstruction?",
-            "Files will be decoded and reconstructed. "
-            "Untrusted media may exploit decoder vulnerabilities. "
-            "Use an isolated environment for high-risk files. "
-            "Continue?"
-        ):
+        if not messagebox.askyesno('Start reconstruction?', 'Media will be decoded and re-encoded. '
+                                   'For high-risk files, use an isolated virtual machine. Continue?'):
             return
-
+        self.cancel_event.clear()
+        self.progress_value.set(0)
+        self.completed, self.total = 0, 0
         self.running = True
-        self.start_button.config(state="disabled")
-        self.progress.start(12)
-        self.status.set("Processing media...")
-        self.write_log("Starting reconstruction...")
-
-        threading.Thread(
-            target=self.worker,
-            args=(str(src), str(dst)),
-            daemon=True
-        ).start()
+        self.start_button.configure(state='disabled')
+        self.cancel_button.configure(state='normal')
+        self.status.set('Preparing file list...')
+        self.append_log('Starting reconstruction...')
+        Thread(target=self.worker, args=(str(src), str(dst)), daemon=True).start()
 
     def worker(self, src, dst):
         try:
-            def update_progress(current, total, filename):
-                self.messages.put((
-                    "log",
-                    f"[{current}/{total}] {filename}"
-                ))
-
-            process_media(
-                src,
-                dst,
-                progress_callback=update_progress
-            )
-
-            self.messages.put(("done", 0))
-
+            def report(done, total, filename, status):
+                self.events.put(('progress', (done, total, filename, status)))
+            result = process_media(src, dst, progress_callback=report, cancel_event=self.cancel_event)
+            self.events.put(('done', result))
         except Exception as error:
-            self.messages.put(("error", str(error)))
+            self.events.put(('error', str(error)))
 
-    def check_messages(self):
+    def cancel(self):
+        if self.running:
+            self.cancel_event.set()
+            self.cancel_button.configure(state='disabled')
+            self.status.set('Cancelling...')
+            self.append_log('Cancellation requested; completing cleanup...')
+
+    def poll_events(self):
         try:
             while True:
-                kind, data = self.messages.get_nowait()
-
-                if kind == "log":
-                    self.write_log(data)
-
-                elif kind == "done":
-                    self.finish(data == 0)
-
-                elif kind == "error":
-                    self.write_log("ERROR: " + data)
-                    self.finish(False)
-
-        except queue.Empty:
+                kind, value = self.events.get_nowait()
+                if kind == 'progress':
+                    done, total, filename, status = value
+                    self.completed, self.total = done, total
+                    self.progress_value.set(100 * done / total if total else 100)
+                    if not self.cancel_event.is_set():
+                        self.status.set(f'{done}/{total} files processed ({self.progress_value.get():.0f}%)')
+                    self.append_log(f'[{done}/{total}] {status}: {filename}')
+                elif kind == 'done':
+                    self.finish(value)
+                elif kind == 'error':
+                    self.append_log('ERROR: ' + value)
+                    self.finish(None)
+        except Empty:
             pass
+        self.root.after(100, self.poll_events)
 
-        self.root.after(100, self.check_messages)
-
-    def finish(self, success):
+    def finish(self, summary):
         self.running = False
-        self.progress.stop()
-        self.start_button.config(state="normal")
-
-        if success:
-            self.status.set("Reconstruction finished")
-            messagebox.showinfo(
-                "Completed",
-                "Processing finished. Review report.csv "
-                "for rejected and skipped files. "
-                "Rebuilt files are not certified malware-free."
-            )
+        self.start_button.configure(state='normal')
+        self.cancel_button.configure(state='disabled')
+        if summary is None:
+            self.status.set('Processing failed. See log.')
+            messagebox.showerror('Failed', 'Processing failed. Check the log.')
         else:
-            self.status.set("Processing failed")
-            messagebox.showerror(
-                "Error",
-                "Processing failed. Review the log."
-            )
+            counts = summary['counts']
+            label = 'Cancelled' if summary['cancelled'] else 'Finished'
+            self.status.set(f"{label}: {summary['processed']}/{summary['total']} files handled")
+            self.append_log(f"{label}. Rebuilt: {counts['REBUILT']}, rejected: {counts['REJECTED']}, skipped: {counts['SKIPPED']}")
+            self.append_log('Report: ' + summary['report'])
+            messagebox.showinfo(label, 'Review report.csv. Rebuilt does not mean malware-free.')
 
     def open_output(self):
-        folder = Path(self.output.get())
-        if folder.is_dir():
+        folder = Path(self.output.get().strip()) if self.output.get().strip() else None
+        if folder and folder.is_dir():
             os.startfile(str(folder))
         else:
-            messagebox.showwarning(
-                "Folder missing",
-                "The output folder does not exist yet."
-            )
+            messagebox.showwarning('Missing folder', 'Output folder does not exist yet.')
 
     def close(self):
         if self.running:
-            messagebox.showwarning(
-                "Processing active",
-                "Reconstruction is still running. "
-                "Finish processing before closing."
-            )
-            return
-
-        self.root.destroy()
+            messagebox.showwarning('Still processing', 'Click Cancel and wait for cleanup to finish before closing.')
+        else:
+            self.root.destroy()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     root = tk.Tk()
     MediaRescueGUI(root)
     root.mainloop()
