@@ -6,6 +6,8 @@ from queue import Queue, Empty
 import os
 
 from media_rescue import process_media
+from defender_scan import scan_folder, DefenderScanError, DefenderScanCancelled
+
 
 class MediaRescueGUI:
     def __init__(self, root):
@@ -15,6 +17,7 @@ class MediaRescueGUI:
         self.source = tk.StringVar()
         self.output = tk.StringVar()
         self.status = tk.StringVar(value='Ready')
+        self.use_defender = tk.BooleanVar(value=False)
         self.progress_value = tk.DoubleVar(value=0)
         self.events = Queue()
         self.cancel_event = Event()
@@ -28,6 +31,8 @@ class MediaRescueGUI:
         ttk.Label(frame, text='Photo & video reconstruction — not malware detection').pack(anchor='w', pady=(0, 14))
         self.folder_row(frame, 'Source folder', self.source)
         self.folder_row(frame, 'Output folder', self.output)
+        ttk.Checkbutton(frame, text='Optional: scan originals and output with Microsoft Defender',
+                        variable=self.use_defender).pack(anchor='w', pady=(0, 8))
         ttk.Label(frame, text='Only reconstructed files should be considered for transfer. '
                   'Processing untrusted files can expose decoder vulnerabilities.', wraplength=670).pack(anchor='w', pady=(5, 12))
         actions = ttk.Frame(frame)
@@ -94,14 +99,31 @@ class MediaRescueGUI:
         self.cancel_button.configure(state='normal')
         self.status.set('Preparing file list...')
         self.append_log('Starting reconstruction...')
-        Thread(target=self.worker, args=(str(src), str(dst)), daemon=True).start()
+        Thread(target=self.worker, args=(str(src), str(dst), self.use_defender.get()), daemon=True).start()
 
-    def worker(self, src, dst):
+    def worker(self, src, dst, use_defender):
         try:
             def report(done, total, filename, status):
                 self.events.put(('progress', (done, total, filename, status)))
-            result = process_media(src, dst, progress_callback=report, cancel_event=self.cancel_event)
+            def scan_log(message):
+                self.events.put(('log', message))
+            if use_defender:
+                self.events.put(('phase', 'Scanning originals with Defender...'))
+                scan_folder(src, self.cancel_event, scan_log)
+            if self.cancel_event.is_set():
+                self.events.put(('cancelled', None))
+                return
+            self.events.put(('phase', 'Reconstructing media...'))
+            result = process_media(src, dst, progress_callback=report,
+                                   cancel_event=self.cancel_event)
+            if use_defender and not result['cancelled'] and result['counts']['REBUILT']:
+                self.events.put(('phase', 'Scanning reconstructed files with Defender...'))
+                scan_folder(dst, self.cancel_event, scan_log)
+            if self.cancel_event.is_set():
+                result['cancelled'] = True
             self.events.put(('done', result))
+        except DefenderScanCancelled:
+            self.events.put(('cancelled', None))
         except Exception as error:
             self.events.put(('error', str(error)))
 
@@ -116,7 +138,17 @@ class MediaRescueGUI:
         try:
             while True:
                 kind, value = self.events.get_nowait()
-                if kind == 'progress':
+                if kind == 'phase':
+                    self.status.set(value)
+                    self.append_log(value)
+                elif kind == 'log':
+                    self.append_log(value)
+                elif kind == 'cancelled':
+                    self.running = False
+                    self.start_button.configure(state='normal')
+                    self.cancel_button.configure(state='disabled')
+                    self.status.set('Cancelled — no safe-scan status assigned')
+                elif kind == 'progress':
                     done, total, filename, status = value
                     self.completed, self.total = done, total
                     self.progress_value.set(100 * done / total if total else 100)
@@ -138,7 +170,7 @@ class MediaRescueGUI:
         self.cancel_button.configure(state='disabled')
         if summary is None:
             self.status.set('Processing failed. See log.')
-            messagebox.showerror('Failed', 'Processing failed. Check the log.')
+            messagebox.showerror('Failed / scan not cleared', 'Processing or Defender scanning failed. Do not treat output as cleared. Review the log and Windows Security.')
         else:
             counts = summary['counts']
             label = 'Cancelled' if summary['cancelled'] else 'Finished'
