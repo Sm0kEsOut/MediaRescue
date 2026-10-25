@@ -1,2 +1,4 @@
+python -m pip install -r requirements.txt
+
 Pillow
 pillow-heif
