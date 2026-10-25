@@ -71,7 +71,7 @@ Place the media you want to rebuild in `Originals`.
 Run:
 
 ```powershell
-python rescue_media.py "C:\MediaRescue\Originals" "C:\MediaRescue\Clean"
+python media_rescue.py "C:\MediaRescue\Originals" "C:\MediaRescue\Clean"
 ```
 
 The program produces:
