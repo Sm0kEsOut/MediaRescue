@@ -5,7 +5,7 @@ from threading import Thread, Event
 from queue import Queue, Empty
 import os
 
-from MediaRescue.media_rescue import process_media
+from media_rescue import process_media
 
 class MediaRescueGUI:
     def __init__(self, root):
