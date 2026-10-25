@@ -110,8 +110,8 @@ Do not submit personal or sensitive media in public bug reports.
 
 ## 🛠️ Roadmap
 
-- [✅] Graphical Windows interface
-- [✅] Standalone Windows executable
+- [ ] Graphical Windows interface
+- [ ] Standalone Windows executable
 - [ ] Progress bar and cancel button
 - [ ] Improved media validation
 - [ ] Automated tests
