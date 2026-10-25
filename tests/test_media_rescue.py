@@ -13,7 +13,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from PIL import Image
-import MediaRescue.media_rescue as mr
+import media_rescue as mr
 
 
 class MediaRescueTests(unittest.TestCase):
