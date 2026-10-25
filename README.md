@@ -87,6 +87,25 @@ Review the report before using the reconstructed media.
 
 Only consider transferring successfully rebuilt files. Keep rejected and unsupported originals separate.
 
+## 🧪 Automated Testing
+
+MediaRescue includes automated tests to verify media reconstruction, validation, cancellation, and error handling.
+
+To run the tests:
+
+```powershell
+python -m pip install -r requirements.txt
+python -m unittest discover -s tests -v
+```
+
+The tests automatically generate harmless sample media and use temporary folders.
+
+GitHub Actions is configured to run the test suite on pushes and pull requests.
+
+**Important:** Passing automated tests does not guarantee that reconstructed files are malware-free or that MediaRescue can defend against unknown exploits.
+
+See [TESTING.md](TESTING.md) for more information.
+
 ## 🔐 Security limitations
 
 MediaRescue aims to reduce risks associated with transferring original media files, but it cannot establish that a file is safe.
